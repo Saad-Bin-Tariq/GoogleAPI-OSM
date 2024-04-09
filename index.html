@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Google Map with OSM</title>
+  <style>
+    #map {
+      height: 400px;
+      width: 80%;
+      border-radius: 15px;
+      margin: auto;
+    }
+    #searchInput {
+      margin-right: 10px;
+    }
+ 
+
+
+/* CSS */
+.button-17 {
+  align-items: center;
+  appearance: none;
+  background-color: #fff;
+  border-radius: 24px;
+  border-style: none;
+  box-shadow: rgba(0, 0, 0, .2) 0 3px 5px -1px,rgba(0, 0, 0, .14) 0 6px 10px 0,rgba(0, 0, 0, .12) 0 1px 18px 0;
+  box-sizing: border-box;
+  color: #3c4043;
+  cursor: pointer;
+  display: inline-flex;
+  fill: currentcolor;
+  font-family: "Google Sans",Roboto,Arial,sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  height: 48px;
+  justify-content: center;
+  letter-spacing: .25px;
+  line-height: normal;
+  max-width: 100%;
+  overflow: visible;
+  padding: 2px 24px;
+  position: relative;
+  text-align: center;
+  text-transform: none;
+  transition: box-shadow 280ms cubic-bezier(.4, 0, .2, 1),opacity 15ms linear 30ms,transform 270ms cubic-bezier(0, 0, .2, 1) 0ms;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  width: auto;
+  will-change: transform,opacity;
+  z-index: 0;
+}
+
+.button-17:hover {
+  background: #F6F9FE;
+  color: #174ea6;
+}
+
+.button-17:active {
+  box-shadow: 0 4px 4px 0 rgb(60 64 67 / 30%), 0 8px 12px 6px rgb(60 64 67 / 15%);
+  outline: none;
+}
+
+.button-17:focus {
+  outline: none;
+  border: 2px solid #4285f4;
+}
+
+.button-17:not(:disabled) {
+  box-shadow: rgba(60, 64, 67, .3) 0 1px 3px 0, rgba(60, 64, 67, .15) 0 4px 8px 3px;
+}
+
+.button-17:not(:disabled):hover {
+  box-shadow: rgba(60, 64, 67, .3) 0 2px 3px 0, rgba(60, 64, 67, .15) 0 6px 10px 4px;
+}
+
+.button-17:not(:disabled):focus {
+  box-shadow: rgba(60, 64, 67, .3) 0 1px 3px 0, rgba(60, 64, 67, .15) 0 4px 8px 3px;
+}
+
+.button-17:not(:disabled):active {
+  box-shadow: rgba(60, 64, 67, .3) 0 4px 4px 0, rgba(60, 64, 67, .15) 0 8px 12px 6px;
+}
+
+.button-17:disabled {
+  box-shadow: rgba(60, 64, 67, .3) 0 1px 3px 0, rgba(60, 64, 67, .15) 0 4px 8px 3px;
+}
+.cen{
+  display: flex;
+        justify-content: center; /* Centers horizontally */
+        height: auto;
+  margin: 10px;
+  font-family: "Google Sans",Roboto,Arial,sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 50px;
+}
+  </style>
+  <!-- Include jQuery -->
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+</head>
+<body>
+  <!-- <h1>Google Maps</h1> -->
+  <!-- Input box for search -->
+  <div class="cen">
+  <input class="button-17" type="text" id="searchInput" placeholder="Enter a location">
+  <button class="button-17" id="searchBtn">Search</button>
+</div>
+  <div id="map"></div>
+<div class="cen">
+  
+  <p>Developed by Saad Bin Tariq</p>
+</div>
+  <script>
+    let map;
+    let lines = [];
+    let markers = []; // To store markers
+
+    const lineSymbol = {
+      path: "M 0,-1 0,1",
+      strokeOpacity: 1,
+      strokeWeight: 2,
+      strokeColor: "#FF0000",
+      scale: 1,
+    };
+
+    let minLat = Number.POSITIVE_INFINITY;
+    let maxLat = Number.NEGATIVE_INFINITY;
+    let minLng = Number.POSITIVE_INFINITY;
+    let maxLng = Number.NEGATIVE_INFINITY;
+
+    // Initialize Google Map
+    function initMap() {
+      map = new google.maps.Map(document.getElementById("map"), {
+        zoom: 10, // Initial zoom level
+        center: { lat: 25.276987, lng: 55.296249 }, // Initial center coordinates
+        mapTypeId: "terrain",
+      });
+    }
+
+    // Function to search for location
+    function searchLocation() {
+      const userInput = $('#searchInput').val().replace(/\s+/g, '+');
+      if (userInput.trim() !== '') {
+        const url = `https://nominatim.openstreetmap.org/search.php?q=${encodeURIComponent(userInput)}&polygon_geojson=1&format=geocodejson`;
+
+        // Fetch JSON data
+        $.ajax({
+          url: url,
+          type: 'GET',
+          success: function(data) {
+            processResponse(data);
+          },
+          error: function(xhr, status, error) {
+            console.error('Error fetching data:', error);
+            alert('An error occurred while fetching data.');
+          }
+        });
+      } else {
+        alert('Please enter a location to search.');
+      }
+    }
+
+    // Function to process response data
+    function processResponse(data) {
+      // Clear previous search results
+      clearMap();
+
+      let displayFeature = null;
+      // First, check for MultiPolygon
+      const multiPolygonFeatures = data.features.filter(feature => feature.geometry && feature.geometry.type === 'MultiPolygon');
+      if (multiPolygonFeatures.length > 0) {
+        displayFeature = multiPolygonFeatures.find(feature => feature.properties.geocoding.osm_value === 'administrative');
+        if (!displayFeature) {
+          displayFeature = multiPolygonFeatures.find(feature => feature.properties.geocoding.type === 'state');
+        }
+        if (!displayFeature) {
+          displayFeature = multiPolygonFeatures[0]; // Display any MultiPolygon if criteria not met
+        }
+      } else {
+        // If no MultiPolygon found, check for Polygon
+        const polygonFeatures = data.features.filter(feature => feature.geometry && feature.geometry.type === 'Polygon');
+        if (polygonFeatures.length > 0) {
+          displayFeature = polygonFeatures.find(feature => feature.properties.geocoding.osm_value === 'administrative');
+          if (!displayFeature) {
+            displayFeature = polygonFeatures.find(feature => feature.properties.geocoding.type === 'state');
+          }
+          if (!displayFeature) {
+            displayFeature = polygonFeatures[0]; // Display any Polygon if criteria not met
+          }
+        } else {
+          // If no Polygon found, check for Point
+          const pointFeatures = data.features.filter(feature => feature.geometry && feature.geometry.type === 'Point');
+          if (pointFeatures.length > 0) {
+            displayFeature = pointFeatures.find(feature => feature.properties.geocoding.type === 'city');
+            if (!displayFeature) {
+              displayFeature = pointFeatures[0]; // Display any Point if criteria not met
+            }
+          }
+        }
+      }
+
+      // Display the selected feature
+      if (displayFeature) {
+        displaySelectedFeature(displayFeature);
+      } else {
+        alert('No results found for the specified location.');
+      }
+    }
+
+    // Function to clear the map of previous search results
+    function clearMap() {
+      // Remove existing polylines
+      lines.forEach(line => {
+        line.setMap(null);
+      });
+      lines = [];
+
+      // Remove existing markers
+      markers.forEach(marker => {
+        marker.setMap(null);
+      });
+      markers = [];
+    }
+
+    // Function to display selected feature on map
+    function displaySelectedFeature(feature) {
+      const geometry = feature.geometry;
+      const properties = feature.properties.geocoding;
+      if (geometry && (geometry.type === 'Polygon' || geometry.type === 'MultiPolygon')) {
+        const coordinates = getCoordinates(geometry);
+       
+      } else if (geometry && geometry.type === 'Point') {
+        const coords = {
+          lat: parseFloat(geometry.coordinates[1]),
+          lng: parseFloat(geometry.coordinates[0])
+        };
+        displayMarker(coords, properties.display_name);
+      }
+    }
+
+    // Function to extract coordinates from geometry
+    function getCoordinates(geometry) {
+  if (geometry.type === 'Polygon') {
+    // Initialize bounds
+    let bounds = new google.maps.LatLngBounds();
+
+    const polygonCoords = geometry.coordinates[0].map(coord => {
+      const lat = parseFloat(coord[1]);
+      const lng = parseFloat(coord[0]);
+      bounds.extend(new google.maps.LatLng(lat, lng));
+      return { lat, lng };
+    });
+
+    // Create polyline for the polygon
+    const polyline = new google.maps.Polyline({
+      path: polygonCoords,
+      strokeOpacity: 0,
+      icons: [{
+        icon: lineSymbol,
+        offset: "0",
+        repeat: "7px",
+      }],
+      map: map,
+    });
+    lines.push(polyline);
+
+    // Fit map bounds to the calculated bounds
+    map.fitBounds(bounds);
+
+    return [polygonCoords];
+  } else if (geometry.type === 'MultiPolygon') {
+    // Initialize bounds
+    let bounds = new google.maps.LatLngBounds();
+
+    geometry.coordinates.forEach(polyCoords => {
+      const polygonCoords = polyCoords[0].map(coord => {
+        const lat = parseFloat(coord[1]);
+        const lng = parseFloat(coord[0]);
+        bounds.extend(new google.maps.LatLng(lat, lng));
+        return { lat, lng };
+      });
+      // Create polyline for the polygon
+      const polyline = new google.maps.Polyline({
+        path: polygonCoords,
+        strokeOpacity: 0,
+        icons: [{
+          icon: lineSymbol,
+          offset: "0",
+          repeat: "7px",
+        }],
+        map: map,
+      });
+      lines.push(polyline);
+    });
+
+    // Fit map bounds to the calculated bounds
+    map.fitBounds(bounds);
+
+    return geometry.coordinates.map(polyCoords => polyCoords[0].map(coord => ({
+      lat: parseFloat(coord[1]),
+      lng: parseFloat(coord[0])
+    })));
+  }
+  return null;
+}
+
+
+    // Function to display marker on map
+    function displayMarker(coords, displayName) {
+      // Display marker
+      const marker = new google.maps.Marker({
+        position: coords,
+        map: map,
+        title: displayName,
+      });
+      markers.push(marker); // Save marker reference
+
+      // Center map on marker
+      map.setCenter(coords);
+      map.setZoom(10);
+    }
+
+    // Set the function as the callback for the Google Maps API loading
+    window.initMap = initMap;
+
+    // Attach click event to search button
+    $(document).ready(function() {
+      $('#searchBtn').click(function() {
+        searchLocation();
+      });
+    });
+  </script>
+
+  <!-- Load the Google Maps JavaScript API -->
+  <!-- Enter your Google Map API Key -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=<EnterYourKeyHere>&callback=initMap&mapTypeId=roadmap" async defer></script>
+</body>
+</html>
